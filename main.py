@@ -127,19 +127,6 @@ def login():
             return None
 
 
-def is_valid_serial_number(serial_number):
-    if serial_number.startswith("LS.") and len(serial_number) == 15:
-        return True
-    if "RITM" in serial_number:
-        if re.match("^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{11}$", serial_number):
-            return True
-        return False
-    else:
-        if re.match("^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{10}$", serial_number):
-            return True
-        return False
-
-
 def check_in():
     """
     We first check if the serial number is valid and then check if it is present in the inventory. If the serial number is present in the inventory, we increment the count by 1. After updating the count in the inventory, we update the respective row in the Google sheet in the worksheet Inventory to represent the new count. We also insert one row in the worksheet History of the Google sheet to record the check-in.
