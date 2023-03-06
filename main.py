@@ -129,8 +129,11 @@ def login():
 
 def check_in():
     """
-    We first check if the serial number is valid and then check if it is present in the inventory. If the serial number is not present in the inventory, we add it to the inventory with count 1. If it is already present, we increment the count by 1. After updating the count, we update the respective row in the Google sheet in the worksheet Inventory to represent the new count. We also insert one row in the worksheet History of the Google sheet to record the checkin.
-    :return:
+    We first check if the serial number is valid and then check if it is present in the inventory.
+    If the serial number is not present in the inventory, we inform the user that the item has already been check in.
+    Otherwise, we add a new object to the local inventory and then insert a new row in the Google Inventory worksheet.
+    We also insert one row in the worksheet History of the Google sheet to record the checkin.
+    :return: Does not return anything.
     """
     print("================================")
     userName = login()
