@@ -31,10 +31,10 @@ def load_from_google_sheet():
     worksheet_inventory, worksheet_history = get_worksheets(SHEET_ID, CREDENTIALS_FILE)
     invent_data = worksheet_inventory.get_all_values()
     headers = invent_data[0]
-    inventory_from_googlesheet = {}
+    inventory_temp = {}
     for row in invent_data[1:]:
         serial_number, count = row
-        inventory_from_googlesheet[serial_number] = {"count": count, "history": []}
+        inventory_temp[serial_number] = {"count": count, "history": []}
 
     hist_data = worksheet_history.get_all_values()
     headers = hist_data[0]
@@ -42,8 +42,8 @@ def load_from_google_sheet():
         serial_number, userName, type_, time_str = row
         t = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
         entry = {"user_name": userName, "type": type_, "time": t}
-        inventory_from_googlesheet[serial_number]["history"].append(entry)
-    return inventory_from_googlesheet  # return the dictionary as a Python object
+        inventory_temp[serial_number]["history"].append(entry)
+    return inventory_temp  # return the dictionary as a Python object
 
 
 def print_inventory(invent):
@@ -129,7 +129,7 @@ def login():
 
 def check_in():
     """
-    We first check if the serial number is valid and then check if it is present in the inventory. If the serial number is present in the inventory, we increment the count by 1. After updating the count in the inventory, we update the respective row in the Google sheet in the worksheet Inventory to represent the new count. We also insert one row in the worksheet History of the Google sheet to record the check-in.
+    We first check if the serial number is valid and then check if it is present in the inventory. If the serial number is not present in the inventory, we add it to the inventory with count 1. If it is already present, we increment the count by 1. After updating the count, we update the respective row in the Google sheet in the worksheet Inventory to represent the new count. We also insert one row in the worksheet History of the Google sheet to record the checkin.
     :return:
     """
     print("================================")
@@ -142,28 +142,33 @@ def check_in():
                 print("You have been logged out!")
                 return
             if is_valid_serial_number(serial_number):
-                if serial_number not in inventory or (
-                        serial_number in inventory and int(inventory[serial_number]["count"]) < 1):
-                    count = 1
-                    inventory[serial_number]["count"] = str(count)
-                    obj = {
-                        "user_name": userName,
-                        "type": "Check-in",
-                        "time": datetime.datetime.now()
+                if serial_number in inventory:
+                    print(f"Asset {serial_number} has already been checked in!")
+                    return
+                else:  # serial_number is not in the inventory. New case. Adding a new item to inventory.
+                    inventory[serial_number] = {
+                        "count": "1",
+                        "history": [{
+                            "user_name": userName,
+                            "type": "Check-in",
+                            "time": datetime.datetime.now()
+                        }]
                     }
-                    inventory[serial_number]["history"].append(obj)
-                    print(f"{serial_number} checked in by {userName}.")
-                    invent, hist = get_worksheets(SHEET_ID, CREDENTIALS_FILE)
-                    # Add row to History worksheet in Google Sheet
-                    new_row = [serial_number, obj["user_name"], obj["type"], obj["time"].strftime("%Y-%m-%d %H:%M:%S")]
-                    hist.append_row(new_row)
-                    # Update row in Inventory worksheet in Google Sheet
-                    cell = invent.find(serial_number)
+                    print(f"{serial_number} added to inventory by {userName}.")
+                invent, hist = get_worksheets(SHEET_ID, CREDENTIALS_FILE)
+                # Update row in Inventory worksheet in Google Sheet
+                cell = invent.find(serial_number)
+                if cell:
                     row = cell.row
                     # The number 2 in the line below refers to the second column, which is where the count value should be updated for the specified serial_number.
-                    invent.update_cell(row, 2, count)
+                    invent.update_cell(row, 2, inventory[serial_number]["count"])
                 else:
-                    print(f"Error: ============> {serial_number} is already in the inventory.")
+                    # If the cell is None, then the serial number does not exist in the worksheet yet. We add a new row for it.
+                    invent.append_row([serial_number, inventory[serial_number]["count"]])
+
+                # Add row to History worksheet in Google Sheet
+                new_row = [serial_number, userName, "checkin", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+                hist.append_row(new_row)  # At position 1 are the column headers.
             else:
                 print("Error: ============> Invalid serial number.")
     else:
