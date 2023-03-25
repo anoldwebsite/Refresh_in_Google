@@ -6,8 +6,6 @@ import hashlib
 import random
 import string
 import getpass
-import atexit
-import signal
 import gspread
 
 from google.oauth2.service_account import Credentials
@@ -119,13 +117,10 @@ def reset_password():
         return False
 
     new_password = input("Enter your new password: ")
-    # new_password = getpass.getpass(prompt='Enter your new password: ')
     # Generate a new salt value
     salt = generate_salt()
     # Hash the new password with the new salt value
     hashed_password = hash_password(new_password, salt)
-    # hashed_password = hash_password(new_password, salt=salt)
-    # Update the user information with the new salt and password
     users[username]['salt'] = salt
     users[username]['password'] = hashed_password
     update_users_sheet()
@@ -514,6 +509,26 @@ def download_fresh_data():
     users = users_local
 
 
+def print_art():
+    print(r"""
+  #####                                                              
+ #     # #####  ######   ##   ##### ###### #####     #####  #   #    
+ #       #    # #       #  #    #   #      #    #    #    #  # #     
+ #       #    # #####  #    #   #   #####  #    #    #####    #      
+ #       #####  #      ######   #   #      #    #    #    #   #      
+ #     # #   #  #      #    #   #   #      #    #    #    #   #      
+  #####  #    # ###### #    #   #   ###### #####     #####    #      
+                                                                     
+    #                                   #    #                       
+   # #        # #    #   ##   #         #   #  #    #   ##   #    #  
+  #   #       # ##  ##  #  #  #         #  #   #    #  #  #  ##   #  
+ #     #      # # ## # #    # #         ###    ###### #    # # #  #  
+ #######      # #    # ###### #         #  #   #    # ###### #  # #  
+ #     # #    # #    # #    # #         #   #  #    # #    # #   ##  
+ #     #  ####  #    # #    # ######    #    # #    # #    # #    # 
+""")
+
+
 download_fresh_data()
 
 while True:
@@ -533,7 +548,8 @@ while True:
         if user_name and user_name == "admin":
             check_in()
         elif user_name:
-            print("You are not authorized to check in assets! Please contact the admin to help you with checking in assets.")
+            print(
+                "You are not authorized to check in assets! Please contact the admin to help you with checking in assets.")
         else:
             print("You are probably not a registered user. You can register an account from the main menu.")
     elif action == "2":
@@ -560,5 +576,7 @@ while True:
     elif action == "9":
         print_all_users()
     else:
-        print("Error: ===============> Invalid action. \n You need to select an option between 1 to 8\n\n")
-        pprint.pprint(inventory)
+        print("\n")
+        print_art()
+        print("\n")
+        print("Error: ===============> Invalid action. \n You need to select an option between 1 to 9\n\n")
