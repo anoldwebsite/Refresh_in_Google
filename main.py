@@ -1,14 +1,10 @@
 import datetime
-import pprint
-import time
 import re
 import hashlib
 import random
 import string
-import getpass
 import gspread
 
-from google.oauth2.service_account import Credentials
 from oauth2client.service_account import ServiceAccountCredentials
 from tabulate import tabulate
 
@@ -101,6 +97,43 @@ def update_users_sheet():
     download_fresh_data()
 
 
+# Delete user
+def delete_user():
+    username = input("Enter your username: ")
+    # Check if the username exists
+    if username not in users:
+        print("Username not found.")
+        return False
+    elif username and not username == 'admin':
+        print("You are not authorized to delete accounts. Please contact the admin to delete your account.")
+        return False
+    current_password = input("Enter your current password: ")
+    # current_password = getpass.getpass(prompt='Enter your current password: ')
+    # Check if the current password is correct
+    if not check_password(current_password, username):
+        print("Incorrect password.")
+        return False
+
+    user_to_delete = input("What is the username of the user that you want to delete? ")
+
+    worksheet = get_worksheet('Users')
+    users_sheet = worksheet.get_all_records()
+
+    # Find the row index of the user with the given username
+    index = None
+    for i, user_data in enumerate(worksheet.get_all_records()):
+        if user_data['username'] == user_to_delete:
+            index = i + 2  # Account for header row and 0-indexing
+            break
+
+    # Delete the row if the user is found
+    if index:
+        worksheet.delete_row(index)
+        print(f"User '{user_to_delete}' deleted successfully.")
+    else:
+        print(f"User '{user_to_delete}' not found in the Google Sheet.")
+
+
 # Define a function to reset a user's password
 def reset_password():
     username = input("Enter your username: ")
@@ -130,20 +163,28 @@ def reset_password():
 
 # Define a function to register a new user
 def register():
+    user_name = login()
+    if not user_name:
+        return False
+    if user_name and not user_name == "admin":
+        print("You are not authorized to register an account! Please ask the admin to create an account for you.")
+        print("You have been logged out!")
+        return False
+
     worksheet = get_worksheet('Users')
-    username = input("Enter your username: ")
+    username = input("Enter username for the new account: ")
     # Check if the username already exists
     if username in users:
         print("Username already exists.")
         return False
 
-    email = input("Enter your E-mail: ")
+    email = input(f"Enter E-mail for {username}: ")
     # Check if the E-mail already exists.
     if email in users:
         print("E-mail already exists.")
         return False
 
-    password = input('Enter your password: ')
+    password = input(f'Enter password for {username}: ')
 
     # Generate a random salt value
     salt = generate_salt()
@@ -157,8 +198,8 @@ def register():
     }
 
     # Encode the password and salt as hex strings before saving to Google sheet
-    encoded_password = hashed_password.encode().hex()
-    encoded_salt = salt.encode().hex()
+    encoded_password = str(hashed_password.encode().hex())
+    encoded_salt = str(salt.encode().hex())
 
     # Append the new user data to the users worksheet
     worksheet.append_row([username, email, encoded_password, encoded_salt])
@@ -201,10 +242,15 @@ def load_users_from_google():
         username = row['username']
         email = row['email']
         encoded_password = str(row['password'])
-        encoded_salt = row['salt']
+        encoded_salt = str(row['salt'])
         # Decode the password and salt from hex strings
-        password = bytes.fromhex(encoded_password).decode()
-        salt = bytes.fromhex(encoded_salt).decode()
+        try:
+            # Decode the password and salt from hex strings
+            password = bytes.fromhex(encoded_password).decode()
+            salt = bytes.fromhex(encoded_salt).decode()
+        except ValueError:
+            print(f"Error decoding salt value for user '{username}'; skipping this user.")
+            continue
         users_local[username] = {
             'email': email,
             'password': password,
@@ -301,28 +347,34 @@ def check_in():
     :return: Does not return anything.
     """
     print("================================")
-    userName = login()
-    if userName and userName == 'admin':
-        print("To stop checking in assets, type the word stop and hit the enter button on the keyboard.\n")
-        while True:
-            ritm_number = input("Enter the RITM for check-in: ")
-            if ritm_number == "stop":
-                print("You have been logged out!")
-                return
-            if is_valid_ritm_number(ritm_number):
-                if ritm_number in inventory:
-                    print(f"Asset {ritm_number} has already been checked in!")
-                    continue
-                else:  # ritm_number is not in the inventory. New case. Adding a new item to inventory.
-                    inventory[ritm_number] = {
-                        "count": "1",
-                        "history": [{
-                            "user_name": userName,
-                            "type": "Check-in",
-                            "time": datetime.datetime.now()
-                        }]
-                    }
-                    print(f"{ritm_number} added to inventory by {userName}.")
+    user_name = login()
+    if not user_name:
+        print(f"{user_name} is not found!")
+        return
+    if user_name and not user_name == "admin":
+        print("You are not authorized to check in assets! Please contact the admin to help you with checking in assets.")
+        return
+    print("\n\n")
+    print('To stop checking in assets, type the word "stop" and hit the enter button on the keyboard.\n')
+    while True:
+        ritm_number = input("Enter the RITM for check-in: ")
+        if ritm_number == "stop":
+            print("You have been logged out!")
+            return
+        if is_valid_ritm_number(ritm_number):
+            if ritm_number in inventory:
+                print(f"Asset {ritm_number} has already been checked in!")
+                continue
+            else:  # ritm_number is not in the inventory. New case. Adding a new item to inventory.
+                inventory[ritm_number] = {
+                    "count": "1",
+                    "history": [{
+                        "user_name": user_name,
+                        "type": "Check-in",
+                        "time": datetime.datetime.now()
+                    }]
+                }
+                print(f"{ritm_number} added to inventory by {user_name}.")
                 invent = get_worksheet('Inventory')
                 hist = get_worksheet('History')
                 # Update row in Inventory worksheet in Google Sheet
@@ -336,11 +388,11 @@ def check_in():
                     invent.append_row([ritm_number, inventory[ritm_number]["count"]])
 
                 # Add row to History worksheet in Google Sheet
-                new_row = [ritm_number, userName, "checkin", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+                new_row = [ritm_number, user_name, "checkin", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
                 hist.append_row(new_row)
-            else:
-                print("Error: ============> Invalid RITM number.")
-                print("If you think the RITM is valid, please contact the admin.")
+        else:
+            print("Error: ============> Invalid RITM number.")
+            print("If you think the RITM is valid, please contact the admin.")
     else:
         print("Error: ============> You are not authorized to check in assets! Please contact the Admin")
 
@@ -518,7 +570,7 @@ def print_art():
  #       #####  #      ######   #   #      #    #    #    #   #      
  #     # #   #  #      #    #   #   #      #    #    #    #   #      
   #####  #    # ###### #    #   #   ###### #####     #####    #      
-                                                                     
+
     #                                   #    #                       
    # #        # #    #   ##   #         #   #  #    #   ##   #    #  
   #   #       # ##  ##  #  #  #         #  #   #    #  #  #  ##   #  
@@ -529,54 +581,55 @@ def print_art():
 """)
 
 
-download_fresh_data()
+def driver():
+    download_fresh_data()
 
-while True:
-    print("------------------------------")
-    action = input("Type 1 to check in an asset, \n"
-                   "Type 2 to check out an asset, \n"
-                   "Type 3 to search an asset, \n"
-                   "Type 4 to see the history of an asset, \n"
-                   "Type 5 to print the inventory, \n"
-                   "Type 6 to exit, \n"
-                   "Type 7 to register an account, \n"
-                   "Type 8 to change your password, \n"
-                   "Type 9 to see all existing users' information, \n"
-                   ">: ")
-    if action == "1":
-        user_name = login()
-        if user_name and user_name == "admin":
+    while True:
+        print("------------------------------")
+        action = input("Type 1 to check in an asset, \n"
+                       "Type 2 to check out an asset, \n"
+                       "Type 3 to search an asset, \n"
+                       "Type 4 to see the history of an asset, \n"
+                       "Type 5 to print the inventory, \n"
+                       "Type 6 to exit, \n"
+                       "Type 7 to register an account, \n"
+                       "Type 8 to change your password, \n"
+                       "Type 9 to see all existing users' information, \n"
+                       "Type 10 to delete an existing user, \n"
+                       ">: ")
+        if action == "1":
             check_in()
-        elif user_name:
-            print(
-                "You are not authorized to check in assets! Please contact the admin to help you with checking in assets.")
+        elif action == "2":
+            check_out()
+        elif action == "3":
+            search_asset(input("Please type or scan the RITM of the asset: "))
+        elif action == "4":
+            get_asset_history(input("Please type the RITM of the asset: "))
+        elif action == "5":
+            print_inventory(inventory)
+        elif action == "6":
+            user_name = login()
+            if user_name and user_name == "admin":
+                print("You chose to shut down the application. Bye Bye!")
+                break
+            else:
+                print("You are not authorized to stop this program!")
+                print("You have been logged out!")
+        elif action == "7":
+            register()
+            print_all_users()
+        elif action == "8":
+            reset_password()
+        elif action == "9":
+            print_all_users()
+        elif action == "10":
+            delete_user()
         else:
-            print("You are probably not a registered user. You can register an account from the main menu.")
-    elif action == "2":
-        check_out()
-    elif action == "3":
-        search_asset(input("Please type or scan the RITM of the asset: "))
-    elif action == "4":
-        get_asset_history(input("Please type the RITM of the asset: "))
-    elif action == "5":
-        print_inventory(inventory)
-    elif action == "6":
-        user_name = login()
-        if user_name and user_name == "admin":
-            print("You chose to shut down the application. Bye Bye!")
-            break
-        else:
-            print("You are not authorized to stop this program!")
-            print("You have been logged out!")
-    elif action == "7":
-        register()
-        print_all_users()
-    elif action == "8":
-        reset_password()
-    elif action == "9":
-        print_all_users()
-    else:
-        print("\n")
-        print_art()
-        print("\n")
-        print("Error: ===============> Invalid action. \n You need to select an option between 1 to 9\n\n")
+            print("\n")
+            print_art()
+            print("\n")
+            print("Error: ===============> Invalid action. \n You need to select an option between 1 to 9\n\n")
+
+
+if __name__ == '__main__':
+    driver()
